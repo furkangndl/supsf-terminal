@@ -49,7 +49,7 @@ Not: uygulama, repo klasörünü `bin/supsf.js` dosyasından bulur (paketlerken 
 
 ## Config
 
-`~/.config/supsf-terminal/config.json` (Windows: `%USERPROFILE%\\.config\\supsf-terminal\\config.json`) — `workspaces`, `prefix`, `sidebarWidth`.
+`~/.config/supsf-terminal/config.json` (Windows: `%USERPROFILE%\.config\supsf-terminal\config.json`) — `workspaces`, `prefix`, `sidebarWidth`.
 
 ## Kısayollar (prefix: Ctrl+B)
 
