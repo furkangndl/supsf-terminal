@@ -1,0 +1,119 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>SupSF</title>
+  <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css">
+  <!-- JetBrains Mono: Ghostty's default font -->
+  <link rel="stylesheet" href="node_modules/@fontsource/jetbrains-mono/400.css">
+  <link rel="stylesheet" href="node_modules/@fontsource/jetbrains-mono/700.css">
+  <link rel="stylesheet" href="node_modules/@fontsource/jetbrains-mono/400-italic.css">
+  <link rel="stylesheet" href="node_modules/@fontsource/jetbrains-mono/700-italic.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: #282c34; overflow: hidden; }
+    #drag { height: 28px; -webkit-app-region: drag; }
+    #term { position: absolute; top: 28px; left: 2px; right: 2px; bottom: 2px; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <div id="drag"></div>
+  <div id="term"></div>
+  <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
+  <script src="node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <script src="node_modules/@xterm/addon-web-links/lib/addon-web-links.js"></script>
+  <script>
+    // Ghostty defaults (font-size 13, background/foreground, palette) from `ghostty +show-config --default`.
+    const FONT = '"JetBrains Mono", "SF Mono", Menlo, monospace';
+
+    async function main() {
+      // Measure cells only after the web font is loaded, otherwise fit() computes too many columns.
+      await Promise.all(['400', '700', 'italic 400'].map((w) => document.fonts.load(`${w} 13px "JetBrains Mono"`)));
+
+      const term = new Terminal({
+        fontFamily: FONT,
+        fontSize: 13,
+        fontWeight: 'normal',
+        fontWeightBold: 'bold',
+        cursorBlink: true,
+        allowProposedApi: true,
+        // Option types layout characters (Turkish Option+Q = @), like Ghostty's default.
+        macOptionIsMeta: false,
+        theme: {
+          background: '#282c34', foreground: '#ffffff', cursor: '#ffffff', selectionBackground: 'rgba(0,0,0,0)', selectionInactiveBackground: 'rgba(0,0,0,0)',
+          black: '#1d1f21', red: '#cc6666', green: '#b5bd68', yellow: '#f0c674',
+          blue: '#81a2be', magenta: '#b294bb', cyan: '#8abeb7', white: '#c5c8c6',
+          brightBlack: '#666666', brightRed: '#d54e53', brightGreen: '#b9ca4a', brightYellow: '#e7c547',
+          brightBlue: '#7aa6da', brightMagenta: '#c397d8', brightCyan: '#70c0b1', brightWhite: '#eaeaea',
+        },
+      });
+      // Shift+Enter → kitty-style CSI 13;2u; supsf turns it into the newline key the inner program expects.
+      term.attachCustomKeyEventHandler((e) => {
+        // Cmd+A: select everything in the active terminal (handled inside supsf, Super+a in kitty encoding).
+        if (e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'a') {
+          if (e.type === 'keydown') window.pty.input('\x1b[97;9u');
+          return false;
+        }
+        // Cmd+Backspace: delete to start of line (Ctrl+U), as in Ghostty / Terminal.app.
+        if (e.metaKey && !e.ctrlKey && !e.altKey && e.key === 'Backspace') {
+          if (e.type === 'keydown') window.pty.input('\x15');
+          return false;
+        }
+        // Cmd+C: the selection lives inside supsf, so ask it to copy (Super+c in kitty encoding).
+        if (e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'c') {
+          if (e.type === 'keydown') window.pty.input('\x1b[99;9u');
+          return false;
+        }
+        if (e.key === 'Enter' && e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) {
+          if (e.type === 'keydown') window.pty.input('\x1b[13;2u');
+          return false;
+        }
+        return true;
+      });
+      // xterm.js scales small pixel deltas by 0.3 in mouse mode, so one mouse-wheel notch sends nothing.
+      // Send wheel reports ourselves: one per line of movement, and at least 3 lines when a new gesture starts.
+      let wheelAcc = 0;
+      let lastWheel = 0;
+      term.attachCustomWheelEventHandler((e) => {
+        if (e.shiftKey || e.deltaY === 0) return false;
+        const screen = term.element.querySelector('.xterm-screen').getBoundingClientRect();
+        const cellH = screen.height / term.rows;
+        const px = e.deltaMode === WheelEvent.DOM_DELTA_LINE ? e.deltaY * cellH
+          : e.deltaMode === WheelEvent.DOM_DELTA_PAGE ? e.deltaY * screen.height : e.deltaY;
+        const fresh = e.timeStamp - lastWheel > 120;
+        lastWheel = e.timeStamp;
+        if (fresh || Math.sign(px) !== Math.sign(wheelAcc)) wheelAcc = 0;
+        wheelAcc += px / cellH;
+        let lines = Math.trunc(wheelAcc);
+        if (fresh && Math.abs(lines) < 3) lines = 3 * Math.sign(px);
+        wheelAcc = fresh ? 0 : wheelAcc - lines;
+        if (!lines) return false;
+        const col = Math.max(1, Math.min(term.cols, Math.floor((e.clientX - screen.left) / (screen.width / term.cols)) + 1));
+        const row = Math.max(1, Math.min(term.rows, Math.floor((e.clientY - screen.top) / cellH) + 1));
+        const seq = `\x1b[<${lines < 0 ? 64 : 65};${col};${row}M`;
+        window.pty.input(seq.repeat(Math.min(Math.abs(lines), 50)));
+        e.preventDefault();
+        return false;
+      });
+      const fit = new FitAddon.FitAddon();
+      term.loadAddon(fit);
+      term.loadAddon(new WebLinksAddon.WebLinksAddon((_e, url) => window.open(url)));
+      term.open(document.getElementById('term'));
+      // Selection is done inside supsf; xterm's own selection only shows up as a stray grey block (e.g. after a resize drag).
+      term.onSelectionChange(() => { if (term.hasSelection()) term.clearSelection(); });
+      fit.fit();
+      window.pty.onData((d) => term.write(d));
+      term.onData((d) => window.pty.input(d));
+      term.onResize(({ cols, rows }) => window.pty.resize(cols, rows));
+      // Coalesce resize events to one fit per frame.
+      let fitFrame = 0;
+      window.addEventListener('resize', () => {
+        cancelAnimationFrame(fitFrame);
+        fitFrame = requestAnimationFrame(() => fit.fit());
+      });
+      window.pty.start(term.cols, term.rows);
+      term.focus();
+    }
+    main();
+  </script>
+</body>
+</html>

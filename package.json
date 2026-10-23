@@ -1,0 +1,24 @@
+{
+  "name": "supsf-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "supsf": "bin/supsf.js"
+  },
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper || true"
+  },
+  "dependencies": {
+    "@xterm/headless": "6.0.0",
+    "cli-highlight": "2.1.11",
+    "node-pty": "1.1.0",
+    "tsx": "4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.1",
+    "typescript": "5.9.3"
+  }
+}
