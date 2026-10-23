@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { RESET, bg, dim, fg, fit, scrollbar, truncate, width } from './ansi.js';
 import {
@@ -7,6 +6,7 @@ import {
 } from './claude.js';
 import { CodePane } from './codepane.js';
 import { loadConfig, makeWorkspace, saveConfig, type Workspace } from './config.js';
+import { SHELL_NAME, copyText } from './platform.js';
 import { TermPane } from './termpane.js';
 
 type Focus = 'sidebar' | 'term' | 'code';
@@ -159,7 +159,6 @@ function removeWorkspace(idx: number): void {
 
 // ---------- terminals ----------
 
-const SHELL_NAME = path.basename(process.env.SHELL || 'zsh');
 let quitting = false;
 
 function spawnTerm(w: Workspace, opts: { command?: string; title?: string; sessionId?: string; pinned?: boolean }): TermPane {
@@ -943,10 +942,7 @@ let clickCount = 0;
 let lastClick: { at: number; row: number; col: number } | undefined;
 
 function copyToClipboard(text: string): void {
-  // Without a UTF-8 locale (apps launched from Finder have no LANG) pbcopy reads the text as MacRoman.
-  const p = spawn('pbcopy', [], { env: { ...process.env, LANG: 'en_US.UTF-8', LC_CTYPE: 'en_US.UTF-8' } });
-  p.on('error', () => showFlash('Kopyalanamadı'));
-  p.stdin.end(text);
+  copyText(text, () => showFlash('Kopyalanamadı'));
   showFlash(`Kopyalandı (${[...text].length} karakter)`);
 }
 

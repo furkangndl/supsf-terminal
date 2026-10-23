@@ -47,19 +47,22 @@
         },
       });
       // Shift+Enter → kitty-style CSI 13;2u; supsf turns it into the newline key the inner program expects.
+      // Cmd on macOS; Ctrl+Shift elsewhere (plain Ctrl+A / Ctrl+C belong to the shell).
+      const isMac = navigator.platform.startsWith('Mac');
+      const mod = (e) => (isMac ? e.metaKey && !e.ctrlKey : e.ctrlKey && e.shiftKey && !e.metaKey) && !e.altKey;
       term.attachCustomKeyEventHandler((e) => {
         // Cmd+A: select everything in the active terminal (handled inside supsf, Super+a in kitty encoding).
-        if (e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'a') {
+        if (mod(e) && e.key.toLowerCase() === 'a') {
           if (e.type === 'keydown') window.pty.input('\x1b[97;9u');
           return false;
         }
         // Cmd+Backspace: delete to start of line (Ctrl+U), as in Ghostty / Terminal.app.
-        if (e.metaKey && !e.ctrlKey && !e.altKey && e.key === 'Backspace') {
+        if (isMac && e.metaKey && !e.ctrlKey && !e.altKey && e.key === 'Backspace') {
           if (e.type === 'keydown') window.pty.input('\x15');
           return false;
         }
         // Cmd+C: the selection lives inside supsf, so ask it to copy (Super+c in kitty encoding).
-        if (e.metaKey && !e.ctrlKey && !e.altKey && e.key.toLowerCase() === 'c') {
+        if (mod(e) && e.key.toLowerCase() === 'c') {
           if (e.type === 'keydown') window.pty.input('\x1b[99;9u');
           return false;
         }

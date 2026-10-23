@@ -1,6 +1,7 @@
 import pty from 'node-pty';
 import xterm from '@xterm/headless';
 import type { IBufferCell } from '@xterm/headless';
+import { SHELL, shellArgs } from './platform.js';
 
 const { Terminal } = xterm;
 
@@ -98,9 +99,7 @@ export class TermPane {
     this.pinned = opts.pinned ?? false;
     this.term = new Terminal({ cols: opts.cols, rows: opts.rows, scrollback: 5000, allowProposedApi: true });
 
-    const shell = process.env.SHELL || '/bin/zsh';
-    const args = opts.command ? ['-l', '-i', '-c', opts.command] : ['-l'];
-    this.proc = pty.spawn(shell, args, {
+    this.proc = pty.spawn(SHELL, shellArgs(opts.command), {
       name: 'xterm-256color',
       cols: opts.cols,
       rows: opts.rows,

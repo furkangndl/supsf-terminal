@@ -3,21 +3,27 @@ const path = require('node:path');
 const os = require('node:os');
 const pty = require('node-pty');
 
-// Repo root holding bin/supsf.js; override with SUPSF_ROOT.
-const ROOT = process.env.SUPSF_ROOT || path.resolve(__dirname, '..');
-const DEV_ROOT = '/Users/furkangundel/Repos/supsf-terminal';
-const repo = require('node:fs').existsSync(path.join(ROOT, 'bin', 'supsf.js')) ? ROOT : DEV_ROOT;
+const fs = require('node:fs');
+const isWin = process.platform === 'win32';
+const isMac = process.platform === 'darwin';
+
+// Repo root holding bin/supsf.js: SUPSF_ROOT, the checkout this app sits in, or the one recorded at package time (root.txt).
+const recorded = fs.existsSync(path.join(__dirname, 'root.txt')) ? fs.readFileSync(path.join(__dirname, 'root.txt'), 'utf8').trim() : '';
+const repo = [process.env.SUPSF_ROOT, path.resolve(__dirname, '..'), recorded]
+  .find((r) => r && fs.existsSync(path.join(r, 'bin', 'supsf.js'))) || path.resolve(__dirname, '..');
 
 // Load the page from the repo when it is there, so edits to desktop/index.html show up without reinstalling.
-const fs = require('node:fs');
 const PAGE_DIR = fs.existsSync(path.join(repo, 'desktop', 'index.html')) ? path.join(repo, 'desktop') : __dirname;
 
 let win;
 let term;
 
 function startPty(cols, rows) {
-  // Login shell so nvm / PATH from the user's profile is available.
-  term = pty.spawn('/bin/zsh', ['-lic', 'exec node bin/supsf.js'], {
+  // Login shell so nvm / PATH from the user's profile is available (PowerShell on Windows).
+  const [shellPath, shellArgs] = isWin
+    ? ['powershell.exe', ['-NoLogo', '-Command', 'node bin/supsf.js']]
+    : ['/bin/zsh', ['-lic', 'exec node bin/supsf.js']];
+  term = pty.spawn(shellPath, shellArgs, {
     name: 'xterm-256color',
     cols,
     rows,
@@ -34,7 +40,7 @@ function createWindow() {
     height: 900,
     title: 'Terminalo',
     backgroundColor: '#1e1e1e',
-    titleBarStyle: 'hiddenInset',
+    ...(isMac ? { titleBarStyle: 'hiddenInset' } : { autoHideMenuBar: true }),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs') },
   });
   win.loadFile(path.join(PAGE_DIR, 'index.html'));
@@ -54,7 +60,13 @@ ipcMain.on('pty:start', (_e, { cols, rows }) => {
   if (!term) return startPty(cols, rows);
   // Page was reloaded: the new terminal is blank, so make supsf repaint everything (SIGWINCH → full redraw).
   term.resize(cols, rows);
-  try { process.kill(term.pid, 'SIGWINCH'); } catch {}
+  if (isWin) {
+    // No SIGWINCH on Windows: a one-row size change makes supsf repaint.
+    term.resize(cols, Math.max(1, rows - 1));
+    term.resize(cols, rows);
+  } else {
+    try { process.kill(term.pid, 'SIGWINCH'); } catch {}
+  }
 });
 ipcMain.on('pty:input', (_e, d) => term && term.write(d));
 ipcMain.on('pty:resize', (_e, { cols, rows }) => term && term.resize(cols, rows));

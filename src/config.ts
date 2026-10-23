@@ -18,7 +18,7 @@ const CONFIG_DIR = path.join(os.homedir(), '.config', 'supsf-terminal');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 export function expandHome(p: string): string {
-  return p === '~' || p.startsWith('~/') ? path.join(os.homedir(), p.slice(1)) : p;
+  return p === '~' || p.startsWith('~/') || p.startsWith('~\\') ? path.join(os.homedir(), p.slice(1)) : p;
 }
 
 export function loadConfig(): Config {

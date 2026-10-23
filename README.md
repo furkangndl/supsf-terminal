@@ -4,13 +4,16 @@ VS Code benzeri workspace + [Claude Code](https://claude.com/claude-code) sessio
 
 ## Gereksinimler
 
-- macOS (node-pty prebuild'leri ve masaüstü uygulaması macOS için)
-- Node.js 22+ ve npm (geliştirme 22.x ile yapıldı)
+- macOS veya Windows 10/11 (x64 / arm64)
+- Node.js 22+ ve npm (geliştirme macOS'ta 22.x ile yapıldı)
 - [Claude Code CLI](https://claude.com/claude-code) (`claude` komutu PATH'te olmalı)
+- Windows'ta: PowerShell (`powershell.exe`, Windows ile gelir). Sekmeler PowerShell açar.
+
+> Windows desteği eklendi ama Windows'ta test edilmedi. Sorun bulursan issue aç.
 
 ## Kurulum
 
-### Terminal sürümü
+### Terminal sürümü (macOS / Windows)
 
 ```sh
 git clone https://github.com/furkangndl/supsf-terminal.git
@@ -20,7 +23,11 @@ npm link          # global `supsf` komutunu oluşturur
 supsf [klasör]    # veya: npm start
 ```
 
-### Masaüstü uygulaması (Terminalo.app)
+Windows'ta Windows Terminal kullanman önerilir (mouse, renk ve Unicode desteği için).
+
+### Masaüstü uygulaması (Terminalo)
+
+macOS:
 
 ```sh
 cd supsf-terminal/desktop
@@ -28,13 +35,21 @@ npm install
 npm run install-app   # paketler ve ~/Applications/Terminalo.app olarak kopyalar
 ```
 
+Windows (PowerShell):
+
+```powershell
+cd supsf-terminal\desktop
+npm install
+npm run package:win   # dist\Terminalo-win32-x64\Terminalo.exe oluşur
+```
+
 Geliştirme modunda çalıştırmak için: `cd desktop && npm start`.
 
-Not: uygulama, repo klasörünü `bin/supsf.js` dosyasından bulur. Repo başka yerdeyse `SUPSF_ROOT` ortam değişkenini repo yoluna ayarla.
+Not: uygulama, repo klasörünü `bin/supsf.js` dosyasından bulur (paketlerken repo yolu kaydedilir, repo'yu taşırsan yeniden paketle). Repo başka yerdeyse `SUPSF_ROOT` ortam değişkenini repo yoluna ayarla.
 
 ## Config
 
-`~/.config/supsf-terminal/config.json` — `workspaces`, `prefix`, `sidebarWidth`.
+`~/.config/supsf-terminal/config.json` (Windows: `%USERPROFILE%\\.config\\supsf-terminal\\config.json`) — `workspaces`, `prefix`, `sidebarWidth`.
 
 ## Kısayollar (prefix: Ctrl+B)
 
@@ -52,7 +67,7 @@ Not: uygulama, repo klasörünü `bin/supsf.js` dosyasından bulur. Repo başka 
 | Ctrl+B Ctrl+B | Ctrl+B'yi terminale gönder |
 
 Sidebar: ↑↓ Enter, `d` workspace sil, `r` yenile. Kod paneli: Tab ağaç/dosya, ↑↓, Enter.
-Mouse: tıklama + scroll. Metin seçmek için Shift+sürükle (masaüstü uygulamasında doğrudan sürükle, Cmd+C ile kopyala).
+Mouse: tıklama + scroll. Terminal sürümünde metin seçmek için Shift+sürükle. Masaüstü uygulamasında doğrudan sürükle; kopyala/tümünü seç: macOS'ta Cmd+C / Cmd+A, Windows'ta Ctrl+Shift+C / Ctrl+Shift+A.
 
 ## Geliştirme
 

@@ -9,7 +9,7 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-*/spawn-helper || true"
+    "postinstall": "node scripts/fix-spawn-helper.cjs"
   },
   "dependencies": {
     "@xterm/headless": "6.0.0",
