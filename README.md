@@ -61,12 +61,13 @@ Not: uygulama, repo klasörünü `bin/supsf.js` dosyasından bulur (paketlerken 
 | e | kod split aç/kapat |
 | s / b | sidebar odak / gizle |
 | ← → | panel odağı |
+| r / , | sekmeyi yeniden adlandır (Claude sekmesinde session adını değiştirir) |
 | w | workspace ekle |
 | PgUp PgDn | scrollback |
 | q | çık |
 | Ctrl+B Ctrl+B | Ctrl+B'yi terminale gönder |
 
-Sidebar: ↑↓ Enter, `d` workspace sil, `r` yenile. Kod paneli: Tab ağaç/dosya, ↑↓, Enter.
+Sidebar: ↑↓ Enter, `n` session adlandır, `x` session sil, `u` geri getir, `d` workspace sil, `r` yenile. Kod paneli: Tab ağaç/dosya, ↑↓, Enter.
 Mouse: tıklama + scroll. Terminal sürümünde metin seçmek için Shift+sürükle. Masaüstü uygulamasında doğrudan sürükle; kopyala/tümünü seç: macOS'ta Cmd+C / Cmd+A, Windows'ta Ctrl+Shift+C / Ctrl+Shift+A.
 
 ## Geliştirme
