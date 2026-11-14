@@ -29,7 +29,10 @@ export function loadConfig(): Config {
     // first run
   }
   return {
-    workspaces: (raw.workspaces ?? []).filter((w) => w && w.path),
+    // Name follows the folder: refreshed from the path on every start.
+    workspaces: (raw.workspaces ?? [])
+      .filter((w) => w && w.path)
+      .map((w) => ({ ...w, name: path.basename(w.path) || w.name })),
     prefix: raw.prefix ?? '\x02',
     sidebarWidth: raw.sidebarWidth ?? 32,
   };

@@ -476,8 +476,11 @@ function renderSidebar(sw: number, h: number): string[] {
         const n = states.get(w.path)?.terms.length ?? 0;
         const active = it.idx === activeWs;
         const badge = n ? ` ${fg(244)}${n}` : '';
-        const name = truncate(w.name, sw - 5 - (n ? String(n).length + 1 : 0));
-        text = `${selBg}${active ? fg(75) + '\x1b[1m ▸ ' : fg(252) + '   '}${name}\x1b[22m${badge}`;
+        const name = truncate(w.name, hovered ? sw - 8 : sw - 5 - (n ? String(n).length + 1 : 0));
+        const x = hovered
+          ? ' '.repeat(Math.max(1, sw - 6 - width(name))) + (hoverClose ? `${bg(160)}${fg(255)}×${selBg}` : `${fg(250)}×`)
+          : badge;
+        text = `${selBg}${active ? fg(75) + '\x1b[1m ▸ ' : fg(252) + '   '}${name}\x1b[22m${x}`;
         break;
       }
       case 'add-ws':
@@ -817,7 +820,7 @@ function updateHover(x: number, y: number): void {
   if (y < d.rows - 1 && sidebarOpen && x < d.sw) {
     const it = sideItems()[sideTop + y];
     if (it && selectable(it)) side = sideTop + y;
-    close = it?.kind === 'session' && x >= d.sw - 3;
+    close = (it?.kind === 'session' || it?.kind === 'ws') && x >= d.sw - 3;
   } else if (y === 0 && x >= d.mx) {
     const r = lastTabRanges.find(([a, z]) => x - d.mx >= a && x - d.mx < z);
     tab = r?.[2] ?? -1;
@@ -856,6 +859,10 @@ function handleMouse(b: number, x: number, y: number, press: boolean, raw: strin
     if (it && selectable(it)) {
       sideSel = idx;
       if (it.kind === 'session' && hoverClose) deleteSessionNow(it.s);
+      else if (it.kind === 'ws' && hoverClose) {
+        const w = cfg.workspaces[it.idx];
+        confirm(`"${w.name}" listeden kaldırılsın mı? Terminalleri kapanır`, () => removeWorkspace(it.idx));
+      }
       else activateSide(it);
     }
     return;
