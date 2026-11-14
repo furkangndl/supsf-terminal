@@ -481,7 +481,7 @@ function sideItems(): SideItem[] {
   const items: SideItem[] = [{ kind: 'header', label: 'WORKSPACES' }];
   cfg.workspaces.forEach((_, idx) => items.push({ kind: 'ws', idx }));
   items.push({ kind: 'add-ws' }, { kind: 'divider' });
-  items.push({ kind: 'header', label: `CLAUDE · ${ws()?.name ?? '-'}` }, { kind: 'new-claude' });
+  items.push({ kind: 'header', label: 'CLAUDE' }, { kind: 'new-claude' });
   for (const s of sessions) items.push({ kind: 'session', s });
   // Each section keeps its own deleted/closed group so they cannot be mixed up.
   if (trashed.length) {
@@ -489,7 +489,7 @@ function sideItems(): SideItem[] {
     if (trashOpen) for (const s of trashed) items.push({ kind: 'trashed', s });
   }
   if (ports.length || closedServers.length) {
-    items.push({ kind: 'divider' }, { kind: 'header', label: `ÇALIŞANLAR · ${ws()?.name ?? '-'}` });
+    items.push({ kind: 'divider' }, { kind: 'header', label: 'ÇALIŞANLAR' });
     for (const p of ports) items.push({ kind: 'port', p });
     if (closedServers.length) {
       items.push({ kind: 'closed-toggle' });
