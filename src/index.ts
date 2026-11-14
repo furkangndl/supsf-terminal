@@ -34,6 +34,8 @@ type SideItem =
   | { kind: 'closed'; c: ClosedServer }
   | { kind: 'trash-toggle' }
   | { kind: 'trashed'; s: TrashedSession }
+  | { kind: 'closed-toggle' }
+  | { kind: 'divider' }
   | { kind: 'blank' };
 
 interface Prompt {
@@ -70,6 +72,7 @@ let closedServers: ClosedServer[] = [];
 const lastSeen = new Map<string, Map<number, ListenPort>>();
 /** Deleted sessions are listed in the sidebar. */
 let trashOpen = false;
+let closedOpen = false;
 let prompt: Prompt | undefined;
 let flash = '';
 let flashTimer: NodeJS.Timeout | undefined;
@@ -477,25 +480,26 @@ function layout(): void {
 function sideItems(): SideItem[] {
   const items: SideItem[] = [{ kind: 'header', label: 'WORKSPACES' }];
   cfg.workspaces.forEach((_, idx) => items.push({ kind: 'ws', idx }));
-  items.push({ kind: 'add-ws' }, { kind: 'blank' });
+  items.push({ kind: 'add-ws' }, { kind: 'divider' });
   items.push({ kind: 'header', label: `CLAUDE · ${ws()?.name ?? '-'}` }, { kind: 'new-claude' });
   for (const s of sessions) items.push({ kind: 'session', s });
-  if (ports.length) {
-    items.push({ kind: 'blank' }, { kind: 'header', label: `ÇALIŞANLAR · ${ws()?.name ?? '-'}` });
-    for (const p of ports) items.push({ kind: 'port', p });
-  }
-  if (closedServers.length) {
-    items.push({ kind: 'blank' }, { kind: 'header', label: 'KAPATILANLAR' });
-    for (const c of closedServers) items.push({ kind: 'closed', c });
-  }
+  // Each section keeps its own deleted/closed group so they cannot be mixed up.
   if (trashed.length) {
-    items.push({ kind: 'blank' }, { kind: 'trash-toggle' });
+    items.push({ kind: 'trash-toggle' });
     if (trashOpen) for (const s of trashed) items.push({ kind: 'trashed', s });
+  }
+  if (ports.length || closedServers.length) {
+    items.push({ kind: 'divider' }, { kind: 'header', label: `ÇALIŞANLAR · ${ws()?.name ?? '-'}` });
+    for (const p of ports) items.push({ kind: 'port', p });
+    if (closedServers.length) {
+      items.push({ kind: 'closed-toggle' });
+      if (closedOpen) for (const c of closedServers) items.push({ kind: 'closed', c });
+    }
   }
   return items;
 }
 
-const selectable = (i: SideItem) => i.kind !== 'header' && i.kind !== 'blank';
+const selectable = (i: SideItem) => i.kind !== 'header' && i.kind !== 'blank' && i.kind !== 'divider';
 
 function moveSide(delta: number): void {
   const items = sideItems();
@@ -525,6 +529,9 @@ function activateSide(item: SideItem | undefined): void {
       break;
     case 'closed':
       restoreServer(item.c);
+      break;
+    case 'closed-toggle':
+      closedOpen = !closedOpen;
       break;
     case 'trash-toggle':
       trashOpen = !trashOpen;
@@ -568,6 +575,9 @@ function renderSidebar(sw: number, h: number): string[] {
         text = `${fg(244)}\x1b[1m ${truncate(it.label, sw - 2)}`;
         break;
       case 'blank':
+        break;
+      case 'divider':
+        text = `${fg(238)} ${'─'.repeat(Math.max(0, sw - 3))}`;
         break;
       case 'ws': {
         const w = cfg.workspaces[it.idx];
@@ -616,8 +626,11 @@ function renderSidebar(sw: number, h: number): string[] {
         text = `${selBg} ${fg(240)}○${fg(244)} ${label}${' '.repeat(pad)}${hovered ? btn : `${fg(240)}${tail}`}`;
         break;
       }
+      case 'closed-toggle':
+        text = `${selBg}${fg(244)} ${closedOpen ? '▾' : '▸'} kapatılanlar (${closedServers.length})`;
+        break;
       case 'trash-toggle':
-        text = `${selBg}${fg(244)} ${trashOpen ? '▾' : '▸'} silinenler (${trashed.length})`;
+        text = `${selBg}${fg(244)} ${trashOpen ? '▾' : '▸'} silinen session'lar (${trashed.length})`;
         break;
       case 'trashed': {
         const t = hovered ? '↺ ×' : ago(it.s.deletedAt);
