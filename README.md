@@ -67,7 +67,7 @@ Not: uygulama, repo klasörünü `bin/supsf.js` dosyasından bulur (paketlerken 
 | q | çık |
 | Ctrl+B Ctrl+B | Ctrl+B'yi terminale gönder |
 
-Sidebar: ↑↓ Enter, `n` session adlandır, `x` session sil, `u` geri getir, `d` workspace sil, `r` yenile. Kod paneli: Tab ağaç/dosya, ↑↓, Enter.
+Sidebar'da workspace'in çalışan portları (macOS/Linux) ve kapatılanlar listelenir; satıra tıklayınca açılır, `×` durdurur. Sidebar: ↑↓ Enter, `n` session adlandır, `x` session sil / çalışan portu durdur / silinmiş session'ı veya kapatılan server'ı kalıcı sil, `u` geri getir (session ya da kapatılan server'ı yeniden başlat), `d` workspace sil, `r` yenile. Kod paneli: Tab ağaç/dosya, ↑↓, Enter.
 Mouse: tıklama + scroll. Terminal sürümünde metin seçmek için Shift+sürükle. Masaüstü uygulamasında doğrudan sürükle; kopyala/tümünü seç: macOS'ta Cmd+C / Cmd+A, Windows'ta Ctrl+Shift+C / Ctrl+Shift+A.
 
 ## Geliştirme

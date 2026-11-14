@@ -26,3 +26,9 @@ export function copyText(text: string, onError: () => void): void {
   p.stdin.on('error', onError);
   p.stdin.end(text);
 }
+
+/** Open `url` in the default browser. */
+export function openUrl(url: string): void {
+  const [cmd, args]: [string, string[]] = isMac ? ['open', [url]] : isWin ? ['cmd', ['/c', 'start', '', url]] : ['xdg-open', [url]];
+  spawn(cmd, args, { stdio: 'ignore', detached: true, windowsHide: true }).on('error', () => {}).unref();
+}

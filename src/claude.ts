@@ -189,6 +189,12 @@ export function restoreSession(cwd: string, id: string): void {
   fs.rmSync(path.join(from, `${id}.deleted`), { force: true });
 }
 
+/** Remove a trashed session for good. */
+export function purgeTrashed(cwd: string, id: string): void {
+  const dir = trashDir(cwd);
+  for (const name of [`${id}.jsonl`, id, `${id}.deleted`]) fs.rmSync(path.join(dir, name), { recursive: true, force: true });
+}
+
 /** Deleted sessions of a project, newest deletion first; expired ones are purged. */
 export function listTrashed(cwd: string): TrashedSession[] {
   const dir = trashDir(cwd);

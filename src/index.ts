@@ -1,12 +1,18 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { RESET, bg, dim, fg, fit, scrollbar, truncate, width } from './ansi.js';
 import {
-  ago, continues, deleteSession, listSessions, listTrashed, renameSession, restoreSession,
+  ago, continues, deleteSession, listSessions, listTrashed, purgeTrashed, renameSession, restoreSession,
   type ClaudeSession, type TrashedSession,
 } from './claude.js';
 import { CodePane } from './codepane.js';
 import { loadConfig, makeWorkspace, saveConfig, type Workspace } from './config.js';
-import { SHELL_NAME, copyText } from './platform.js';
+import { SHELL_NAME, copyText, openUrl } from './platform.js';
+import {
+  killPort, listPorts, loadClosed, portHost, portUrl, restartCommand, saveClosed,
+  type ClosedServer, type ListenPort,
+} from './ports.js';
 import { TermPane } from './termpane.js';
 
 type Focus = 'sidebar' | 'term' | 'code';
@@ -24,6 +30,8 @@ type SideItem =
   | { kind: 'add-ws' }
   | { kind: 'new-claude' }
   | { kind: 'session'; s: ClaudeSession }
+  | { kind: 'port'; p: ListenPort }
+  | { kind: 'closed'; c: ClosedServer }
   | { kind: 'trash-toggle' }
   | { kind: 'trashed'; s: TrashedSession }
   | { kind: 'blank' };
@@ -56,6 +64,10 @@ let sbDrag = false;
 let pointer = false;
 let sessions: ClaudeSession[] = [];
 let trashed: TrashedSession[] = [];
+let ports: ListenPort[] = [];
+let closedServers: ClosedServer[] = [];
+/** Last listeners seen per workspace, to notice which ones disappeared. */
+const lastSeen = new Map<string, Map<number, ListenPort>>();
 /** Deleted sessions are listed in the sidebar. */
 let trashOpen = false;
 let prompt: Prompt | undefined;
@@ -114,6 +126,9 @@ function switchWs(idx: number): void {
   if (idx < 0 || idx >= cfg.workspaces.length) return;
   activeWs = idx;
   ensurePinned(cfg.workspaces[idx]);
+  ports = [];
+  closedServers = loadClosed(cfg.workspaces[idx].path);
+  void refreshPorts();
   refreshSessions();
   layout();
   schedule();
@@ -267,6 +282,20 @@ function tabTitle(t: TermPane): string {
   return t.customTitle ?? t.title;
 }
 
+function purgeSessionNow(s: TrashedSession): void {
+  const w = ws();
+  if (!w) return;
+  confirm(`"${truncate(s.title, 30)}" kalıcı silinsin mi? Geri alınamaz`, () => {
+    try {
+      purgeTrashed(w.path, s.id);
+      showFlash('Kalıcı silindi');
+    } catch (e: any) {
+      showFlash(`Silinemedi: ${e.message}`);
+    }
+    refreshSessions();
+  });
+}
+
 function restoreSessionNow(s: TrashedSession | undefined): void {
   const w = ws();
   if (!w || !s) return;
@@ -362,6 +391,60 @@ function refreshSessions(): void {
   }
 }
 
+let portsBusy = false;
+async function refreshPorts(): Promise<void> {
+  const w = ws();
+  if (portsBusy || !w) return;
+  portsBusy = true;
+  try {
+    const next = await listPorts(w.path);
+    if (ws() !== w) return;
+    // Anything seen before that is gone now was closed: remember it so it can be started again.
+    const prev = lastSeen.get(w.path);
+    const nowPorts = new Set(next.map((p) => p.port));
+    let list = closedServers.filter((c) => !nowPorts.has(c.port));
+    if (prev) {
+      for (const [port, p] of prev) {
+        if (nowPorts.has(port) || !p.args) continue;
+        list = [{ port, addr: p.addr, cmd: p.cmd, args: p.args, cwd: p.cwd, closedAt: Date.now() },
+          ...list.filter((c) => c.port !== port)];
+      }
+    }
+    lastSeen.set(w.path, new Map(next.map((p) => [p.port, p])));
+    const key = (l: ListenPort[]) => l.map((p) => `${p.pid}:${p.port}:${p.addr}`).join();
+    const closedKey = (l: ClosedServer[]) => l.map((c) => `${c.port}:${c.closedAt}`).join();
+    const changed = key(next) !== key(ports) || closedKey(list) !== closedKey(closedServers);
+    if (closedKey(list) !== closedKey(closedServers)) saveClosed(w.path, list);
+    ports = next;
+    closedServers = list.slice(0, 20);
+    if (changed) schedule();
+  } catch {
+    // lsof/ps failed this round; try again on the next tick
+  } finally {
+    portsBusy = false;
+  }
+}
+
+function stopPort(p: ListenPort): void {
+  killPort(p);
+  showFlash(`Durduruldu: ${p.cmd} :${p.port}`);
+  setTimeout(() => void refreshPorts(), 500);
+}
+
+function restoreServer(c: ClosedServer): void {
+  newTerm(restartCommand(c), `▶ :${c.port} ${c.cmd}`);
+  showFlash(`Başlatılıyor: ${portHost(c)}:${c.port}`);
+  setTimeout(() => void refreshPorts(), 1500);
+}
+
+function forgetServer(c: ClosedServer): void {
+  const w = ws();
+  if (!w) return;
+  closedServers = closedServers.filter((x) => x !== c);
+  saveClosed(w.path, closedServers);
+  schedule();
+}
+
 // ---------- layout ----------
 
 function dims() {
@@ -397,6 +480,14 @@ function sideItems(): SideItem[] {
   items.push({ kind: 'add-ws' }, { kind: 'blank' });
   items.push({ kind: 'header', label: `CLAUDE · ${ws()?.name ?? '-'}` }, { kind: 'new-claude' });
   for (const s of sessions) items.push({ kind: 'session', s });
+  if (ports.length) {
+    items.push({ kind: 'blank' }, { kind: 'header', label: `ÇALIŞANLAR · ${ws()?.name ?? '-'}` });
+    for (const p of ports) items.push({ kind: 'port', p });
+  }
+  if (closedServers.length) {
+    items.push({ kind: 'blank' }, { kind: 'header', label: 'KAPATILANLAR' });
+    for (const c of closedServers) items.push({ kind: 'closed', c });
+  }
   if (trashed.length) {
     items.push({ kind: 'blank' }, { kind: 'trash-toggle' });
     if (trashOpen) for (const s of trashed) items.push({ kind: 'trashed', s });
@@ -427,6 +518,13 @@ function activateSide(item: SideItem | undefined): void {
       break;
     case 'session':
       openClaude(item.s);
+      break;
+    case 'port':
+      openUrl(portUrl(item.p));
+      showFlash(`Açıldı: ${portUrl(item.p)}`);
+      break;
+    case 'closed':
+      restoreServer(item.c);
       break;
     case 'trash-toggle':
       trashOpen = !trashOpen;
@@ -500,14 +598,33 @@ function renderSidebar(sw: number, h: number): string[] {
         text = `${selBg} ${mark} ${current ? fg(255) + '\x1b[1m' : fg(250)}${title}\x1b[22m${' '.repeat(pad)}${time}`;
         break;
       }
+      case 'port': {
+        const label = `${portHost(it.p)}:${it.p.port}`;
+        const t = hovered ? '×' : it.p.cmd;
+        const room = sw - 6 - width(label) - 1;
+        const tail = hovered ? t : room > 3 ? truncate(t, room) : '';
+        const pad = Math.max(1, sw - 4 - width(label) - width(tail));
+        const right = hovered ? (hoverClose ? `${bg(160)}${fg(255)}×${selBg}` : `${fg(250)}×`) : `${fg(242)}${tail}`;
+        text = `${selBg} ${fg(114)}●${fg(250)} ${label}\x1b[22m${' '.repeat(pad)}${right}`;
+        break;
+      }
+      case 'closed': {
+        const label = `${portHost(it.c)}:${it.c.port}`;
+        const btn = hovered ? `${fg(114)}↺ ${hoverClose ? `${bg(160)}${fg(255)}×${selBg}` : `${fg(250)}×`}` : '';
+        const tail = hovered ? '' : truncate(it.c.cmd, Math.max(0, sw - 8 - width(label)));
+        const pad = Math.max(1, sw - 4 - width(label) - (hovered ? 3 : width(tail)));
+        text = `${selBg} ${fg(240)}○${fg(244)} ${label}${' '.repeat(pad)}${hovered ? btn : `${fg(240)}${tail}`}`;
+        break;
+      }
       case 'trash-toggle':
         text = `${selBg}${fg(244)} ${trashOpen ? '▾' : '▸'} silinenler (${trashed.length})`;
         break;
       case 'trashed': {
-        const t = hovered ? '↺' : ago(it.s.deletedAt);
+        const t = hovered ? '↺ ×' : ago(it.s.deletedAt);
         const title = truncate(it.s.title, sw - 6 - t.length);
         const pad = Math.max(1, sw - 4 - width(title) - t.length);
-        text = `${selBg}   ${fg(242)}${title}${' '.repeat(pad)}${hovered ? fg(114) : fg(240)}${t}`;
+        const right = hovered ? `${fg(114)}↺ ${hoverClose ? `${bg(160)}${fg(255)}×${selBg}` : `${fg(250)}×`}` : `${fg(240)}${t}`;
+        text = `${selBg}   ${fg(242)}${title}${' '.repeat(pad)}${right}`;
         break;
       }
     }
@@ -799,9 +916,17 @@ function paneKey(k: string): void {
     case '\r': activateSide(item); break;
     case 'r': refreshSessions(); showFlash('Session listesi yenilendi'); break;
     case 'a': openClaude(); break;
-    case 'x': if (item?.kind === 'session') deleteSessionNow(item.s); break;
+    case 'x':
+      if (item?.kind === 'session') deleteSessionNow(item.s);
+      else if (item?.kind === 'port') stopPort(item.p);
+      else if (item?.kind === 'trashed') purgeSessionNow(item.s);
+      else if (item?.kind === 'closed') forgetServer(item.c);
+      break;
     case 'n': if (item?.kind === 'session') askRenameSession(item.s); break;
-    case 'u': restoreSessionNow(item?.kind === 'trashed' ? item.s : trashed[0]); break;
+    case 'u':
+      if (item?.kind === 'closed') restoreServer(item.c);
+      else restoreSessionNow(item?.kind === 'trashed' ? item.s : trashed[0]);
+      break;
     case 'd':
       if (item?.kind === 'ws') {
         const w = cfg.workspaces[item.idx];
@@ -820,7 +945,7 @@ function updateHover(x: number, y: number): void {
   if (y < d.rows - 1 && sidebarOpen && x < d.sw) {
     const it = sideItems()[sideTop + y];
     if (it && selectable(it)) side = sideTop + y;
-    close = (it?.kind === 'session' || it?.kind === 'ws') && x >= d.sw - 3;
+    close = (it?.kind === 'session' || it?.kind === 'ws' || it?.kind === 'port' || it?.kind === 'trashed' || it?.kind === 'closed') && x >= d.sw - 3;
   } else if (y === 0 && x >= d.mx) {
     const r = lastTabRanges.find(([a, z]) => x - d.mx >= a && x - d.mx < z);
     tab = r?.[2] ?? -1;
@@ -859,6 +984,9 @@ function handleMouse(b: number, x: number, y: number, press: boolean, raw: strin
     if (it && selectable(it)) {
       sideSel = idx;
       if (it.kind === 'session' && hoverClose) deleteSessionNow(it.s);
+      else if (it.kind === 'port' && hoverClose) stopPort(it.p);
+      else if (it.kind === 'trashed' && hoverClose) purgeSessionNow(it.s);
+      else if (it.kind === 'closed' && hoverClose) forgetServer(it.c);
       else if (it.kind === 'ws' && hoverClose) {
         const w = cfg.workspaces[it.idx];
         confirm(`"${w.name}" listeden kaldırılsın mı? Terminalleri kapanır`, () => removeWorkspace(it.idx));
@@ -1006,6 +1134,11 @@ process.on('SIGWINCH', () => {
 process.on('SIGTERM', quit);
 process.on('SIGHUP', quit);
 process.on('uncaughtException', (e) => {
+  try {
+    fs.appendFileSync(path.join(os.homedir(), '.config', 'supsf-terminal', 'crash.log'), `${new Date().toISOString()} ${e?.stack ?? e}\n`);
+  } catch {
+    // no log
+  }
   out.write('\x1b[?1003l\x1b[?1002l\x1b[?1006l\x1b]22;default\x07\x1b[?2004l\x1b[0m\x1b[?25h\x1b[<u\x1b[?1049l');
   console.error(e);
   process.exit(1);
@@ -1013,6 +1146,7 @@ process.on('uncaughtException', (e) => {
 
 if (cfg.workspaces.length) switchWs(activeWs);
 setInterval(refreshSessions, 2000);
+setInterval(() => void refreshPorts(), 3000);
 // Animate the working spinner; also lets the 1-hour "replied" dot expire on screen.
 setInterval(() => {
   spinFrame++;
